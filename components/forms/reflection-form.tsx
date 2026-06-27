@@ -38,10 +38,11 @@ export function ReflectionForm({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSubmit({
-      ...form,
-      mockTestScore: mockScoreInput ? Number(mockScoreInput) : undefined,
-    });
+    const payload: ReflectionInput = { ...form };
+    if (mockScoreInput) {
+      payload.mockTestScore = Number(mockScoreInput);
+    }
+    onSubmit(payload);
   };
 
   return (

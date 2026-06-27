@@ -1,7 +1,12 @@
 import type { StoredAnalysis } from "@/types";
+import { STORAGE_KEY } from "@/lib/constants";
 import { wellnessAnalysisSchema } from "@/lib/schemas";
-
-const STORAGE_KEY = "mindsprint-latest-analysis";
+import {
+  safeLocalStorageRead,
+  safeLocalStorageRemove,
+  safeLocalStorageWrite,
+  safeParseJson,
+} from "@/lib/utils";
 
 let snapshotCache:
   | { raw: string | null; data: StoredAnalysis | null }
@@ -14,35 +19,38 @@ function isStoredAnalysisCompatible(data: StoredAnalysis | null): boolean {
 
 function getCachedAnalysis(): StoredAnalysis | null {
   if (typeof window === "undefined") return null;
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (snapshotCache !== undefined && snapshotCache.raw === raw) {
-      return snapshotCache.data;
-    }
-    const data = raw ? (JSON.parse(raw) as StoredAnalysis) : null;
 
-    if (data && !isStoredAnalysisCompatible(data)) {
-      localStorage.removeItem(STORAGE_KEY);
-      snapshotCache = { raw: null, data: null };
-      return null;
-    }
+  const raw = safeLocalStorageRead(STORAGE_KEY);
+  if (snapshotCache !== undefined && snapshotCache.raw === raw) {
+    return snapshotCache.data;
+  }
 
-    snapshotCache = { raw, data };
-    return data;
-  } catch {
+  if (!raw) {
     snapshotCache = { raw: null, data: null };
     return null;
   }
+
+  const parsed = safeParseJson(raw);
+  const data =
+    parsed !== null && typeof parsed === "object"
+      ? (parsed as StoredAnalysis)
+      : null;
+
+  if (data && !isStoredAnalysisCompatible(data)) {
+    safeLocalStorageRemove(STORAGE_KEY);
+    snapshotCache = { raw: null, data: null };
+    return null;
+  }
+
+  snapshotCache = { raw, data };
+  return data;
 }
 
 export function saveAnalysis(data: StoredAnalysis): void {
   if (typeof window === "undefined") return;
-  try {
-    const raw = JSON.stringify(data);
-    localStorage.setItem(STORAGE_KEY, raw);
+  const raw = JSON.stringify(data);
+  if (safeLocalStorageWrite(STORAGE_KEY, raw)) {
     snapshotCache = { raw, data };
-  } catch {
-    // localStorage may be unavailable or full
   }
 }
 
@@ -52,11 +60,8 @@ export function loadAnalysis(): StoredAnalysis | null {
 
 export function clearAnalysis(): void {
   if (typeof window === "undefined") return;
-  try {
-    localStorage.removeItem(STORAGE_KEY);
+  if (safeLocalStorageRemove(STORAGE_KEY)) {
     snapshotCache = { raw: null, data: null };
-  } catch {
-    // ignore
   }
 }
 

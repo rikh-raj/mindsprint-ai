@@ -1,41 +1,47 @@
 import type { ReflectionInput } from "@/types";
+import { STRESS_SCORE } from "@/lib/constants";
 import { isJournalSentimentNegative } from "@/lib/sentiment";
 
 export function computePreliminaryStressScore(input: ReflectionInput): number {
   let score = 0;
 
-  if (input.sleepHours < 6) {
-    score += 25;
+  if (input.sleepHours < STRESS_SCORE.LOW_SLEEP_THRESHOLD) {
+    score += STRESS_SCORE.LOW_SLEEP_PENALTY;
   }
 
-  if (input.studyHours > 10) {
-    score += 20;
+  if (input.studyHours > STRESS_SCORE.HIGH_STUDY_THRESHOLD) {
+    score += STRESS_SCORE.HIGH_STUDY_PENALTY;
   }
 
   if (
     input.mockTestScore !== undefined &&
-    input.mockTestScore !== null &&
-    input.mockTestScore < 60
+    input.mockTestScore < STRESS_SCORE.LOW_MOCK_THRESHOLD
   ) {
-    score += 15;
+    score += STRESS_SCORE.LOW_MOCK_PENALTY;
   }
 
   if (input.exerciseFrequency === "Never") {
-    score += 10;
+    score += STRESS_SCORE.NO_EXERCISE_PENALTY;
   }
 
   if (isJournalSentimentNegative(input.journalText)) {
-    score += 20;
+    score += STRESS_SCORE.NEGATIVE_SENTIMENT_PENALTY;
   }
 
-  return Math.min(100, Math.max(0, score));
+  return Math.min(
+    STRESS_SCORE.MAX,
+    Math.max(STRESS_SCORE.MIN, score)
+  );
 }
 
 export function clampStressScore(
   score: number,
   preliminaryScore: number
 ): number {
-  const min = Math.max(0, preliminaryScore - 10);
-  const max = Math.min(100, preliminaryScore + 10);
-  return Math.min(100, Math.max(0, Math.min(max, Math.max(min, score))));
+  const min = Math.max(STRESS_SCORE.MIN, preliminaryScore - STRESS_SCORE.ADJUSTMENT_RANGE);
+  const max = Math.min(STRESS_SCORE.MAX, preliminaryScore + STRESS_SCORE.ADJUSTMENT_RANGE);
+  return Math.min(
+    STRESS_SCORE.MAX,
+    Math.max(STRESS_SCORE.MIN, Math.min(max, Math.max(min, score)))
+  );
 }

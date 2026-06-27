@@ -1,6 +1,8 @@
 import { GoogleGenAI } from "@google/genai";
 import OpenAI from "openai";
 import type { ReflectionInput, WellnessAnalysis } from "@/types";
+import { AI_CONFIG } from "@/lib/config";
+import { PLACEHOLDER_API_KEYS } from "@/lib/constants";
 import { buildMindSprintPrompt } from "@/lib/prompt";
 import {
   geminiWellnessSchema,
@@ -10,13 +12,13 @@ import {
 import { clampStressScore } from "@/lib/stress";
 import { generateDemoAnalysis } from "@/lib/demo";
 import { enrichWellnessAnalysis } from "@/lib/enrichment";
-
-const TIMEOUT_MS = 10_000;
-const GEMINI_MODEL = "gemini-2.5-flash";
-const DEEPSEEK_MODEL = "deepseek/deepseek-r1-0528:free";
+import { safeParseJson } from "@/lib/utils";
 
 function isPlaceholderKey(key: string | undefined): boolean {
-  return !key || key === "your_api_key_here" || key.trim() === "";
+  if (!key || key.trim() === "") return true;
+  return PLACEHOLDER_API_KEYS.includes(
+    key as (typeof PLACEHOLDER_API_KEYS)[number]
+  );
 }
 
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
@@ -28,25 +30,25 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   ]);
 }
 
-export function parseAiResponse(text: string): unknown {
+function extractJsonText(text: string): string {
   const trimmed = text.trim();
   const fenceMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/);
-  const jsonText = fenceMatch
-    ? fenceMatch[1].trim()
-    : (() => {
-        const start = trimmed.indexOf("{");
-        const end = trimmed.lastIndexOf("}");
-        if (start !== -1 && end !== -1 && end > start) {
-          return trimmed.slice(start, end + 1);
-        }
-        return trimmed;
-      })();
+  if (fenceMatch?.[1]) return fenceMatch[1].trim();
 
-  try {
-    return JSON.parse(jsonText) as unknown;
-  } catch {
+  const start = trimmed.indexOf("{");
+  const end = trimmed.lastIndexOf("}");
+  if (start !== -1 && end !== -1 && end > start) {
+    return trimmed.slice(start, end + 1);
+  }
+  return trimmed;
+}
+
+export function parseAiResponse(text: string): unknown {
+  const parsed = safeParseJson(extractJsonText(text));
+  if (parsed === null) {
     throw new Error("Failed to parse AI response as JSON");
   }
+  return parsed;
 }
 
 export function validateAiResponse(data: unknown): GeminiWellnessValues {
@@ -85,14 +87,14 @@ async function requestGeminiRaw(
 
   const response = await withTimeout(
     ai.models.generateContent({
-      model: GEMINI_MODEL,
+      model: AI_CONFIG.GEMINI_MODEL,
       contents: prompt,
       config: {
         responseMimeType: "application/json",
-        temperature: 0.7,
+        temperature: AI_CONFIG.TEMPERATURE,
       },
     }),
-    TIMEOUT_MS
+    AI_CONFIG.TIMEOUT_MS
   );
 
   const rawText = response.text ?? "";
@@ -114,10 +116,10 @@ async function requestDeepSeekRaw(
 
   const client = new OpenAI({
     apiKey: apiKey!,
-    baseURL: "https://openrouter.ai/api/v1",
+    baseURL: AI_CONFIG.OPENROUTER_BASE_URL,
     defaultHeaders: {
-      "HTTP-Referer": "https://mindsprint-ai.vercel.app",
-      "X-Title": "MindSprint AI",
+      "HTTP-Referer": AI_CONFIG.OPENROUTER_REFERER,
+      "X-Title": AI_CONFIG.OPENROUTER_TITLE,
     },
   });
 
@@ -125,12 +127,12 @@ async function requestDeepSeekRaw(
 
   const response = await withTimeout(
     client.chat.completions.create({
-      model: DEEPSEEK_MODEL,
+      model: AI_CONFIG.DEEPSEEK_MODEL,
       messages: [{ role: "user", content: prompt }],
-      temperature: 0.7,
+      temperature: AI_CONFIG.TEMPERATURE,
       response_format: { type: "json_object" },
     }),
-    TIMEOUT_MS
+    AI_CONFIG.TIMEOUT_MS
   );
 
   const rawText = response.choices[0]?.message?.content ?? "";
@@ -141,7 +143,6 @@ async function requestDeepSeekRaw(
   return rawText;
 }
 
-/** Primary provider — Google Gemini 2.5 Flash (throws on failure) */
 async function callGeminiProvider(
   input: ReflectionInput,
   preliminaryStressScore: number
@@ -151,7 +152,6 @@ async function callGeminiProvider(
   return finalizeAnalysis(input, parsed, preliminaryStressScore);
 }
 
-/** Secondary provider — DeepSeek R1 Free via OpenRouter (throws on failure) */
 export async function analyzeWithDeepSeek(
   input: ReflectionInput,
   preliminaryStressScore: number
@@ -161,7 +161,6 @@ export async function analyzeWithDeepSeek(
   return finalizeAnalysis(input, parsed, preliminaryStressScore);
 }
 
-/** Gemini-only provider helper (throws on failure) — spec: analyzeWithGemini() */
 export async function analyzeWithGemini(
   input: ReflectionInput,
   preliminaryStressScore: number
@@ -169,7 +168,6 @@ export async function analyzeWithGemini(
   return callGeminiProvider(input, preliminaryStressScore);
 }
 
-/** Fallback chain: Gemini → DeepSeek → Demo. Never throws. */
 export async function analyzeWithAI(
   input: ReflectionInput,
   preliminaryStressScore: number

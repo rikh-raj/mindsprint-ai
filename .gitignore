@@ -12,6 +12,9 @@
 
 # testing
 /coverage
+/.stryker-tmp
+/stryker-tmp
+/reports
 
 # next.js
 /.next/

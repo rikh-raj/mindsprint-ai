@@ -1,3 +1,5 @@
+import { SENTIMENT } from "@/lib/constants";
+
 const NEGATIVE_KEYWORDS = [
   "stressed",
   "stress",
@@ -31,12 +33,12 @@ const NEGATIVE_KEYWORDS = [
   "breakdown",
   "doubt",
   "fear",
-];
+] as const;
 
 export function isJournalSentimentNegative(journalText: string): boolean {
   const normalized = journalText.toLowerCase();
   const matchCount = NEGATIVE_KEYWORDS.filter((keyword) =>
     normalized.includes(keyword)
   ).length;
-  return matchCount >= 2;
+  return matchCount >= SENTIMENT.MIN_NEGATIVE_KEYWORDS;
 }

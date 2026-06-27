@@ -157,7 +157,7 @@ export default function HomePage() {
           <ReflectionForm
             onSubmit={handleSubmit}
             isLoading={isLoading}
-            initialValues={lastInput ?? undefined}
+            {...(lastInput ? { initialValues: lastInput } : {})}
           />
         )}
 

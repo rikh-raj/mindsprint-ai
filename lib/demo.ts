@@ -1,12 +1,13 @@
 import type { ReflectionInput, WellnessAnalysis } from "@/types";
+import { RISK_THRESHOLDS } from "@/lib/constants";
 import { clampStressScore } from "@/lib/stress";
 import { enrichWellnessAnalysis } from "@/lib/enrichment";
 import { generateDemoExtendedFields } from "@/lib/demo-helpers";
 
 function riskFromScore(score: number): WellnessAnalysis["risk_level"] {
-  if (score <= 30) return "Low";
-  if (score <= 55) return "Moderate";
-  if (score <= 75) return "Elevated";
+  if (score <= RISK_THRESHOLDS.LOW) return "Low";
+  if (score <= RISK_THRESHOLDS.MODERATE) return "Moderate";
+  if (score <= RISK_THRESHOLDS.ELEVATED) return "Elevated";
   return "High";
 }
 
